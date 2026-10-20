@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 use bevy::prelude::*;
 use bevy::window::WindowResolution;
-use bevy_egui::{egui, EguiContexts, EguiPlugin};
+use bevy_egui::{egui, EguiContexts, EguiPlugin, EguiPrimaryContextPass};
 use chrono::NaiveDate;
 use ygopro_core::ScriptLoader;
 use ygopro_data::{BanlistRegistry, CardDatabase, ReleaseDateIndex};
@@ -154,27 +154,32 @@ fn main() {
                 }),
         )
         .add_plugins(EguiPlugin::default())
+        .insert_resource(ClearColor(Color::srgb_u8(15, 17, 23)))
         .insert_resource(resources)
-        .add_systems(Update, client_ui_system)
+        .add_systems(Startup, setup_camera)
+        .add_systems(EguiPrimaryContextPass, client_ui_system)
         .run();
 }
 
-fn client_ui_system(mut contexts: EguiContexts, mut res: ResMut<ClientResources>) {
-    let Ok(ctx) = contexts.ctx_mut() else {
-        return;
-    };
+fn setup_camera(mut commands: Commands) {
+    commands.spawn(Camera2d);
+}
+
+fn client_ui_system(mut contexts: EguiContexts, mut res: ResMut<ClientResources>) -> Result {
+    let ctx = contexts.ctx_mut()?;
     let res = &mut *res;
 
-    // Full screen container window
-    let screen_rect = ctx.viewport_rect();
-    egui::Window::new("RootContainer")
-        .title_bar(false)
-        .resizable(false)
-        .movable(false)
-        .fixed_pos(screen_rect.min)
-        .fixed_size(screen_rect.size())
+    let mut viewport_ui = egui::Ui::new(
+        ctx.clone(),
+        "viewport".into(),
+        egui::UiBuilder::new()
+            .layer_id(egui::LayerId::background())
+            .max_rect(ctx.viewport_rect()),
+    );
+
+    egui::CentralPanel::default()
         .frame(egui::Frame::new().fill(BG_DARK))
-        .show(ctx, |ui| {
+        .show(&mut viewport_ui, |ui| {
             match res.app_state {
                 AppState::MainMenu => {
                     let card_count = res.db.len();
@@ -249,4 +254,5 @@ fn client_ui_system(mut contexts: EguiContexts, mut res: ResMut<ClientResources>
                 }
             }
         });
+    Ok(())
 }
