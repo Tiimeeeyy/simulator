@@ -502,6 +502,16 @@ impl CoreMessage {
                     chains,
                 }
             }
+            MSG_SELECT_PLACE => CoreMessage::SelectPlace {
+                player: r.read_u8()?,
+                count: r.read_u8()?,
+                flag: r.read_u32()?,
+            },
+            MSG_SELECT_DISFIELD => CoreMessage::SelectDisfield {
+                player: r.read_u8()?,
+                count: r.read_u8()?,
+                flag: r.read_u32()?,
+            },
             MSG_SELECT_POSITION => CoreMessage::SelectPosition {
                 player: r.read_u8()?,
                 code: r.read_u32()?,

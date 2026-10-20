@@ -1,5 +1,14 @@
-//! Native duel AI.
+//! Native duel AI for ygopro.
 //!
-//! **Phase 3**: `DuelAgent` trait, `BotBoardState` tracker (incl. HOPT flags),
-//! and the `TearlamentsPolicy` heuristics. The default bot deck is
-//! [`ygopro_data::builtin::TEARLAMENTS_ISHIZU`].
+//! Provides the [`DuelAgent`] trait, [`BotBoardState`] tracker,
+//! [`TearlamentsPolicy`] specialized AI, and [`GenericAgent`].
+
+pub mod agent;
+pub mod generic;
+pub mod state;
+pub mod tearlaments;
+
+pub use agent::DuelAgent;
+pub use generic::GenericAgent;
+pub use state::BotBoardState;
+pub use tearlaments::TearlamentsPolicy;

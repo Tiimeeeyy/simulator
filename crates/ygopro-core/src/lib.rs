@@ -11,6 +11,9 @@ pub mod script;
 
 pub use duel::{Duel, DuelConfig, ProcessResult};
 pub use error::{Error, Result};
-pub use message::{parse_message_stream, CoreMessage};
+pub use message::{
+    parse_message_stream, CmdActivatableItem, CmdAttackableItem, CmdCardItem, CoreMessage,
+    SelectCardItem, SelectChainItem,
+};
 pub use response::{BattleCmdChoice, IdleCmdChoice, PlayerResponse};
 pub use script::ScriptLoader;

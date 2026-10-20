@@ -557,6 +557,8 @@ dependencies = [
 name = "ygopro-bot"
 version = "0.1.0"
 dependencies = [
+ "ocgcore-sys",
+ "tracing",
  "ygopro-core",
  "ygopro-data",
 ]
@@ -595,6 +597,8 @@ dependencies = [
 name = "ygopro-host"
 version = "0.1.0"
 dependencies = [
+ "thiserror",
+ "tracing",
  "ygopro-bot",
  "ygopro-core",
  "ygopro-data",

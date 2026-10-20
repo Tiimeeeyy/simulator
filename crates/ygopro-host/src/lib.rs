@@ -1,5 +1,12 @@
 //! Local duel coordinator.
 //!
-//! **Phase 3**: drives a `ygopro_core` duel, connecting the human UI over
-//! in-memory channels and Player 2 to either the in-process `ygopro-bot` or an
-//! external WindBot process via a `127.0.0.1:0` `STOC_*`/`CTOS_*` listener.
+//! Provides [`DuelSession`], [`PlayerController`], and [`WindBotBridge`] for
+//! driving local and networked duels.
+
+pub mod error;
+pub mod session;
+pub mod windbot;
+
+pub use error::{HostError, Result};
+pub use session::{DuelSession, PlayerController, StepOutcome};
+pub use windbot::WindBotBridge;
