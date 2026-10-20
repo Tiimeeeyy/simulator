@@ -228,6 +228,9 @@ dependencies = [
 [[package]]
 name = "ocgcore-sys"
 version = "0.1.0"
+dependencies = [
+ "cc",
+]
 
 [[package]]
 name = "once_cell"
@@ -570,6 +573,8 @@ name = "ygopro-core"
 version = "0.1.0"
 dependencies = [
  "ocgcore-sys",
+ "thiserror",
+ "tracing",
  "ygopro-data",
 ]
 

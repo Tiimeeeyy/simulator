@@ -1,6 +1,6 @@
 [package]
 name = "ygopro-core"
-description = "Safe duel wrapper around ocgcore: CoreMessage parsing and PlayerResponse builders (Phase 2)."
+description = "Safe duel wrapper around ocgcore: CoreMessage parsing and PlayerResponse builders."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,3 +8,5 @@ license.workspace = true
 [dependencies]
 ocgcore-sys.workspace = true
 ygopro-data.workspace = true
+thiserror.workspace = true
+tracing.workspace = true

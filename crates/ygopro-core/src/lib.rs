@@ -1,5 +1,16 @@
 //! Safe, idiomatic wrapper around [`ocgcore_sys`].
 //!
-//! **Phase 2**: duel lifecycle, `card_reader` / `script_reader` /
-//! `message_handler` callbacks, `CoreMessage` decoding and `PlayerResponse`
-//! encoding.
+//! Provides the [`Duel`] abstraction, [`ScriptLoader`], [`CoreMessage`] parsing,
+//! and [`PlayerResponse`] builders.
+
+pub mod duel;
+pub mod error;
+pub mod message;
+pub mod response;
+pub mod script;
+
+pub use duel::{Duel, DuelConfig, ProcessResult};
+pub use error::{Error, Result};
+pub use message::{parse_message_stream, CoreMessage};
+pub use response::{BattleCmdChoice, IdleCmdChoice, PlayerResponse};
+pub use script::ScriptLoader;

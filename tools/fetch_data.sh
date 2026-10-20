@@ -20,3 +20,8 @@ if [ ! -f "$CACHE/cardinfo.json" ] || [ "${REFRESH_YGOPRODECK:-0}" = "1" ]; then
   curl -fsS --compressed -o "$CACHE/cardinfo.json" "https://db.ygoprodeck.com/api/v7/cardinfo.php?misc=yes"
 fi
 python3 "$ROOT/tools/build_release_dates.py" "$CACHE/cardinfo.json" "$DATA/release_dates.csv"
+
+echo ">> CardScripts (ProjectIgnis)"
+if [ -d "$CACHE/CardScripts/.git" ]; then git -C "$CACHE/CardScripts" pull -q; else git clone --depth 1 https://github.com/ProjectIgnis/CardScripts.git "$CACHE/CardScripts"; fi
+ln -sfn ../.cache/CardScripts "$DATA/scripts"
+
