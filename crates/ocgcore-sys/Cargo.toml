@@ -1,0 +1,8 @@
+[package]
+name = "ocgcore-sys"
+description = "Raw FFI bindings to the ygopro ocgcore rules engine (Phase 2)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]

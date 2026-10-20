@@ -1,0 +1,38 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/ocgcore-sys",
+    "crates/ygopro-core",
+    "crates/ygopro-data",
+    "crates/ygopro-bot",
+    "crates/ygopro-host",
+    "crates/ygopro-client",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/timey/ygo"
+
+[workspace.dependencies]
+# internal
+ocgcore-sys = { path = "crates/ocgcore-sys" }
+ygopro-core = { path = "crates/ygopro-core" }
+ygopro-data = { path = "crates/ygopro-data" }
+ygopro-bot = { path = "crates/ygopro-bot" }
+ygopro-host = { path = "crates/ygopro-host" }
+
+# external
+base64 = "0.23"
+chrono = { version = "0.4.45", default-features = false, features = ["std", "clock"] }
+regex = "1"
+rusqlite = { version = "0.40", features = ["bundled"] }
+strsim = "0.11"
+thiserror = "2"
+tracing = "0.1"
+
+[profile.dev.package."*"]
+# Dependencies (sqlite, later bevy/wgpu) are compiled with optimizations even in dev.
+opt-level = 2

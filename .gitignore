@@ -1,0 +1,4 @@
+/target
+/.cache
+# Large / regenerable data (see tools/fetch_data.sh)
+/data/cards.cdb

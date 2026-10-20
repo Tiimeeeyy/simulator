@@ -1,0 +1,14 @@
+[package]
+name = "ygopro-client"
+description = "Desktop client (Bevy + bevy_egui) (Phases 4-5)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "ygopro"
+path = "src/main.rs"
+
+[dependencies]
+ygopro-data.workspace = true
+# Phase 4 adds: bevy = "0.20", bevy_egui, egui_extras, lru

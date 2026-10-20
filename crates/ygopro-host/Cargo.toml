@@ -1,0 +1,11 @@
+[package]
+name = "ygopro-host"
+description = "Local duel coordinator: in-process ygopro-bot or WindBot over loopback TCP (Phase 3)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ygopro-core.workspace = true
+ygopro-data.workspace = true
+ygopro-bot.workspace = true

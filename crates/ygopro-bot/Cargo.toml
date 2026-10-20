@@ -1,0 +1,10 @@
+[package]
+name = "ygopro-bot"
+description = "Native Rust duel AI (DuelAgent trait, Tearlaments policy) (Phase 3)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ygopro-core.workspace = true
+ygopro-data.workspace = true

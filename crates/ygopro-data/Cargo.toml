@@ -1,0 +1,15 @@
+[package]
+name = "ygopro-data"
+description = "Card database (cards.cdb), strings.conf, deck import/export and the date-aware TCG/OCG banlist registry."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+base64.workspace = true
+chrono.workspace = true
+regex.workspace = true
+rusqlite.workspace = true
+strsim.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
