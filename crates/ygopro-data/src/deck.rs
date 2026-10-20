@@ -39,6 +39,12 @@ impl Deck {
         self.main.len() + self.extra.len() + self.side.len()
     }
 
+    pub fn card_count(&self, code: u32) -> usize {
+        self.main.iter().filter(|&&c| c == code).count()
+            + self.extra.iter().filter(|&&c| c == code).count()
+            + self.side.iter().filter(|&&c| c == code).count()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.main.is_empty() && self.extra.is_empty() && self.side.is_empty()
     }

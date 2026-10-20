@@ -4,7 +4,7 @@ use ygopro_core::{CoreMessage, PlayerResponse};
 use ygopro_data::CardDatabase;
 
 /// An autonomous AI agent capable of playing a duel.
-pub trait DuelAgent: Send {
+pub trait DuelAgent: Send + Sync {
     /// Human-readable identifier for the bot.
     fn name(&self) -> &str;
 

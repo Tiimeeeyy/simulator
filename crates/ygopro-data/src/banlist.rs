@@ -416,6 +416,18 @@ impl BanlistRegistry {
         })
     }
 
+    /// All banlist names.
+    pub fn names(&self) -> Vec<String> {
+        let mut names = Vec::new();
+        for list in self.timelines.values().flat_map(|t| t.values()) {
+            names.push(list.name.clone());
+        }
+        for name in self.custom.keys() {
+            names.push(name.clone());
+        }
+        names
+    }
+
     /// Resolve the list in force for `query`: the newest list of the region
     /// whose effective date is `<= as_of_date`.
     pub fn resolve(&self, query: &BanlistQuery) -> Result<ActiveBanlist> {

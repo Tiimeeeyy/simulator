@@ -177,6 +177,7 @@ pub struct Duel {
 }
 
 unsafe impl Send for Duel {}
+unsafe impl Sync for Duel {}
 
 impl Duel {
     /// Create and initialize a new duel.

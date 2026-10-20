@@ -10,5 +10,14 @@ name = "ygopro"
 path = "src/main.rs"
 
 [dependencies]
+ocgcore-sys.workspace = true
+ygopro-core.workspace = true
 ygopro-data.workspace = true
-# Phase 4 adds: bevy = "0.20", bevy_egui, egui_extras, lru
+ygopro-bot.workspace = true
+ygopro-host.workspace = true
+chrono.workspace = true
+tracing.workspace = true
+bevy = "0.20"
+bevy_egui = "0.43"
+image = "0.25"
+crossbeam-channel = "0.5"

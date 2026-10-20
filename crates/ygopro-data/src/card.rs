@@ -82,6 +82,22 @@ impl Card {
     pub fn is_extra_deck_monster(&self) -> bool {
         self.is_monster() && self.is_type(TYPE_EXTRA_DECK)
     }
+    #[inline]
+    pub fn is_xyz(&self) -> bool {
+        self.is_type(TYPE_XYZ)
+    }
+    #[inline]
+    pub fn is_link(&self) -> bool {
+        self.is_type(TYPE_LINK)
+    }
+    #[inline]
+    pub fn is_fusion(&self) -> bool {
+        self.is_type(TYPE_FUSION)
+    }
+    #[inline]
+    pub fn is_synchro(&self) -> bool {
+        self.is_type(TYPE_SYNCHRO)
+    }
     /// Tokens, Skills and Action cards can never be put in a deck.
     #[inline]
     pub fn is_deckable(&self) -> bool {
