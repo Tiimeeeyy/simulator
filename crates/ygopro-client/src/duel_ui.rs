@@ -1,4 +1,4 @@
-//! High-performance interactive Duel Board and Action Coordinator.
+//! Master Duel inspired interactive Duel Board, Action Coordinator, and Chain Toggle system.
 
 use std::sync::Arc;
 use bevy_egui::egui::{
@@ -22,13 +22,22 @@ pub enum BotOpponentType {
     Generic,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ActivationToggle {
+    #[default]
+    Auto,
+    On,
+    Off,
+}
+
 pub struct DuelUiState {
     pub session: Option<DuelSession>,
     pub bot_type: BotOpponentType,
+    pub activation_toggle: ActivationToggle,
     pub duel_log: Vec<String>,
     pub auto_step: bool,
     pub active_prompt: Option<CoreMessage>,
-    pub selected_hand_idx: Option<usize>,
+    pub selected_hand_code: Option<u32>,
     pub winner: Option<u8>,
     pub my_lp: u32,
     pub opp_lp: u32,
@@ -42,6 +51,8 @@ pub struct DuelUiState {
     pub opp_szone: Vec<Option<u32>>,
     pub my_grave: Vec<u32>,
     pub opp_grave: Vec<u32>,
+    pub active_chains: Vec<(u32, u8, u32)>, // (code, player, chain_link)
+    pub view_pile: Option<(String, Vec<u32>)>, // title, cards
 }
 
 impl DuelUiState {
@@ -49,10 +60,11 @@ impl DuelUiState {
         Self {
             session: None,
             bot_type: BotOpponentType::IshizuTearlaments,
+            activation_toggle: ActivationToggle::Auto,
             duel_log: Vec::new(),
             auto_step: true,
             active_prompt: None,
-            selected_hand_idx: None,
+            selected_hand_code: None,
             winner: None,
             my_lp: 8000,
             opp_lp: 8000,
@@ -66,6 +78,8 @@ impl DuelUiState {
             opp_szone: vec![None; 5],
             my_grave: Vec::new(),
             opp_grave: Vec::new(),
+            active_chains: Vec::new(),
+            view_pile: None,
         }
     }
 
@@ -103,7 +117,7 @@ impl DuelUiState {
         let session = DuelSession::new(duel, db, p0, p1);
         self.session = Some(session);
         self.duel_log.clear();
-        self.duel_log.push("⚔️ Duel started!".into());
+        self.duel_log.push("⚔️ Duel started! Master Duel ruleset active.".into());
         self.my_lp = 8000;
         self.opp_lp = 8000;
         self.my_hand.clear();
@@ -114,6 +128,7 @@ impl DuelUiState {
         self.opp_szone = vec![None; 5];
         self.my_grave.clear();
         self.opp_grave.clear();
+        self.active_chains.clear();
         self.winner = None;
     }
 
@@ -146,18 +161,22 @@ impl DuelUiState {
                 CoreMessage::Chaining { code, con, chain_link, .. } => {
                     let name = db.get(*code).map(|c| c.name.as_str()).unwrap_or("Card");
                     let p_str = if *con == 0 { "Player" } else { "Opponent" };
-                    self.duel_log.push(format!("Chain Link {chain_link}: {p_str} activated '{name}'"));
+                    self.active_chains.push((*code, *con, *chain_link as u32));
+                    self.duel_log.push(format!("⚡ Chain Link {chain_link}: {p_str} activated '{name}'"));
                 }
                 CoreMessage::ChainSolving { chain_link } => {
-                    self.duel_log.push(format!("Resolving Chain Link {chain_link}..."));
+                    self.duel_log.push(format!("✨ Resolving Chain Link {chain_link}..."));
+                }
+                CoreMessage::ChainEnd => {
+                    self.active_chains.clear();
                 }
                 CoreMessage::Damage { player, amount } => {
                     if *player == 0 {
                         self.my_lp = self.my_lp.saturating_sub(*amount);
-                        self.duel_log.push(format!("Player took {amount} damage (LP: {})", self.my_lp));
+                        self.duel_log.push(format!("💥 Player took {amount} damage (LP: {})", self.my_lp));
                     } else {
                         self.opp_lp = self.opp_lp.saturating_sub(*amount);
-                        self.duel_log.push(format!("Opponent took {amount} damage (LP: {})", self.opp_lp));
+                        self.duel_log.push(format!("💥 Opponent took {amount} damage (LP: {})", self.opp_lp));
                     }
                 }
                 CoreMessage::Recover { player, amount } => {
@@ -232,7 +251,7 @@ pub fn render_duel_screen(
     let screen_w = ui.available_width();
     let screen_h = ui.available_height();
 
-    // Run engine step if auto-stepping and no human prompt is pending
+    // Advance engine step if auto-stepping and no prompt is awaiting input
     if state.auto_step && state.active_prompt.is_none() && state.session.is_some() && state.winner.is_none() {
         if let Some(ref mut session) = state.session {
             match session.step() {
@@ -242,7 +261,7 @@ pub fn render_duel_screen(
                     }
                     StepOutcome::BotActed { response, messages, .. } => {
                         state.handle_messages(&messages, db);
-                        state.duel_log.push(format!("🤖 Bot responded: {response:?}"));
+                        state.duel_log.push(format!("🤖 Bot response: {response:?}"));
                     }
                     StepOutcome::AwaitingHuman { prompt, messages, .. } => {
                         state.handle_messages(&messages, db);
@@ -260,31 +279,62 @@ pub fn render_duel_screen(
         }
     }
 
-    // 1. Top Header Bar: Turn, Phase, LP, and Controls
+    // 1. TOP HEADER: MASTER DUEL LIFE POINTS GAUGES & PHASE BAR
     ui.horizontal(|ui| {
-        ui.heading(RichText::new("⚔️ DUEL FIELD").color(ACCENT_GOLD).size(18.0).strong());
+        // Player LP Gauge
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("👤 YOU").color(ACCENT_BLUE).strong());
+            let lp_color = if state.my_lp > 4000 { ACCENT_GREEN } else if state.my_lp > 2000 { ACCENT_GOLD } else { ACCENT_RED };
+            ui.label(RichText::new(format!("LP {}", state.my_lp)).size(18.0).color(lp_color).strong());
+        });
+
+        ui.add_space(20.0);
         ui.separator();
+        ui.add_space(20.0);
 
-        let phase_str = match state.current_phase {
-            1 => "DRAW PHASE",
-            2 => "STANDBY PHASE",
-            4 => "MAIN PHASE 1",
-            8 => "BATTLE PHASE",
-            16 => "MAIN PHASE 2",
-            512 => "END PHASE",
-            _ => "MAIN PHASE",
-        };
-        ui.label(RichText::new(format!("Turn {} | {phase_str}", state.turn_count)).color(ACCENT_CYAN).strong());
+        // Master Duel Phase Strip: [ DP ] [ SP ] [ M1 ] [ BP ] [ M2 ] [ EP ]
+        let phases = [
+            (1, "DP", "Draw Phase"),
+            (2, "SP", "Standby Phase"),
+            (4, "M1", "Main Phase 1"),
+            (8, "BP", "Battle Phase"),
+            (16, "M2", "Main Phase 2"),
+            (512, "EP", "End Phase"),
+        ];
 
+        ui.label(RichText::new(format!("TURN {}", state.turn_count)).color(TEXT_MUTED).strong());
+        ui.add_space(8.0);
+
+        for (mask, short, name) in phases {
+            let is_current = (state.current_phase & mask) != 0;
+            let (bg, text_col) = if is_current {
+                (ACCENT_CYAN, Color32::BLACK)
+            } else {
+                (Color32::from_rgb(26, 32, 48), TEXT_MUTED)
+            };
+
+            let badge = egui::Button::new(RichText::new(short).strong().color(text_col))
+                .fill(bg)
+                .corner_radius(3.0);
+            ui.add(badge).on_hover_text(name);
+        }
+
+        ui.add_space(20.0);
         ui.separator();
-        ui.label(RichText::new(format!("Player LP: {}", state.my_lp)).color(ACCENT_GREEN).strong());
-        ui.label(RichText::new(format!("Opponent LP: {}", state.opp_lp)).color(ACCENT_RED).strong());
+        ui.add_space(20.0);
 
+        // Opponent LP Gauge
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("🤖 AI").color(ACCENT_RED).strong());
+            let opp_lp_col = if state.opp_lp > 4000 { ACCENT_GREEN } else if state.opp_lp > 2000 { ACCENT_GOLD } else { ACCENT_RED };
+            ui.label(RichText::new(format!("LP {}", state.opp_lp)).size(18.0).color(opp_lp_col).strong());
+        });
+
+        // Top Right Controls (Leave duel & Manual step)
         ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button("Leave Duel").clicked() {
+            if ui.button("Leave Match").clicked() {
                 *return_to_menu = true;
             }
-            ui.checkbox(&mut state.auto_step, "Auto-Step");
             if ui.button("Step ▶").clicked() && state.active_prompt.is_none() && state.session.is_some() {
                 if let Some(ref mut session) = state.session {
                     if let Ok(outcome) = session.step() {
@@ -303,42 +353,59 @@ pub fn render_duel_screen(
                     }
                 }
             }
+            ui.checkbox(&mut state.auto_step, "Auto-Step");
         });
     });
 
     ui.separator();
 
-    let field_w = screen_w - 320.0;
-    let log_w = 300.0;
+    // Active Chain Links Display (Master Duel Chain Stack)
+    if !state.active_chains.is_empty() {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("⚡ ACTIVE CHAIN:").color(ACCENT_GOLD).strong());
+            for (code, con, link) in &state.active_chains {
+                let name = db.get(*code).map(|c| c.name.as_str()).unwrap_or("Card");
+                let badge_col = if *con == 0 { ACCENT_BLUE } else { ACCENT_RED };
+                ui.label(RichText::new(format!("[Link {link}: {name}]")).color(badge_col).strong());
+            }
+        });
+        ui.separator();
+    }
+
+    let field_w = screen_w - 340.0;
+    let log_w = 320.0;
 
     ui.horizontal(|ui| {
-        // --- DUEL FIELD (LEFT) ---
-        ui.allocate_ui(Vec2::new(field_w, screen_h - 60.0), |ui| {
+        // --- DUEL FIELD BOARD (LEFT) ---
+        ui.allocate_ui(Vec2::new(field_w, screen_h - 75.0), |ui| {
             ui.vertical(|ui| {
-                // 1. Opponent Status & Hand
+                // 1. OPPONENT STATUS & HAND
                 ui.horizontal(|ui| {
                     ui.label(RichText::new("Opponent (AI)").strong().color(ACCENT_RED));
-                    ui.label(RichText::new(format!("Hand: {} cards | GY: {} | Banished: 0", state.opp_hand_count, state.opp_grave.len())).color(TEXT_MUTED));
-                });
-
-                // Opponent facedown hand cards
-                ui.horizontal(|ui| {
-                    for _ in 0..state.opp_hand_count.min(10) {
-                        let (rect, _) = ui.allocate_exact_size(Vec2::new(45.0, 65.0), egui::Sense::hover());
-                        ui.painter().rect_filled(rect, 3.0, Color32::from_rgb(120, 40, 40));
-                        ui.painter().rect_stroke(rect, 3.0, Stroke::new(1.0, Color32::from_black_alpha(160)), egui::StrokeKind::Inside);
+                    ui.label(RichText::new(format!("Hand: {} cards", state.opp_hand_count)).color(TEXT_MUTED));
+                    if ui.button(format!("GY ({})", state.opp_grave.len())).clicked() {
+                        state.view_pile = Some(("Opponent Graveyard".into(), state.opp_grave.clone()));
                     }
                 });
 
-                ui.add_space(8.0);
+                // Opponent facedown cards in hand
+                ui.horizontal(|ui| {
+                    for _ in 0..state.opp_hand_count.min(12) {
+                        let (rect, _) = ui.allocate_exact_size(Vec2::new(45.0, 65.0), egui::Sense::hover());
+                        ui.painter().rect_filled(rect, 3.0, Color32::from_rgb(130, 40, 40));
+                        ui.painter().rect_stroke(rect, 3.0, Stroke::new(1.0, Color32::from_black_alpha(180)), egui::StrokeKind::Inside);
+                    }
+                });
 
-                // 2. Opponent Field Zones (SZone row, then MZone row)
-                let zone_w = 64.0;
-                let zone_h = 88.0;
+                ui.add_space(6.0);
+
+                // 2. OPPONENT FIELD (S/T row, then Monster row)
+                let zone_w = 70.0;
+                let zone_h = 96.0;
 
                 // Opponent Spell/Trap Zones
-                ui.label(RichText::new("Opponent Spells/Traps").size(11.0).color(TEXT_MUTED));
                 ui.horizontal(|ui| {
+                    ui.label(RichText::new("Opp S/T:").color(TEXT_MUTED).size(11.0));
                     for seq in (0..5).rev() {
                         let code = state.opp_szone[seq];
                         render_zone_slot(ui, code, zone_w, zone_h, db);
@@ -348,21 +415,22 @@ pub fn render_duel_screen(
                 ui.add_space(4.0);
 
                 // Opponent Monster Zones
-                ui.label(RichText::new("Opponent Monsters").size(11.0).color(TEXT_MUTED));
                 ui.horizontal(|ui| {
+                    ui.label(RichText::new("Opp MZone:").color(TEXT_MUTED).size(11.0));
                     for seq in (0..5).rev() {
                         let code = state.opp_mzone[seq];
                         render_zone_slot(ui, code, zone_w, zone_h, db);
                     }
                 });
 
-                ui.add_space(12.0);
+                ui.add_space(10.0);
                 ui.separator();
-                ui.add_space(12.0);
+                ui.add_space(10.0);
 
-                // 3. Player Field Zones (MZone row, then SZone row)
-                ui.label(RichText::new("Player Monsters").size(11.0).color(TEXT_MUTED));
+                // 3. PLAYER FIELD (Monster row, then S/T row)
+                // Player Monster Zones
                 ui.horizontal(|ui| {
+                    ui.label(RichText::new("You MZone:").color(TEXT_MUTED).size(11.0));
                     for seq in 0..5 {
                         let code = state.my_mzone[seq];
                         render_zone_slot(ui, code, zone_w, zone_h, db);
@@ -372,44 +440,70 @@ pub fn render_duel_screen(
                 ui.add_space(4.0);
 
                 // Player Spell/Trap Zones
-                ui.label(RichText::new("Player Spells/Traps").size(11.0).color(TEXT_MUTED));
                 ui.horizontal(|ui| {
+                    ui.label(RichText::new("You S/T:").color(TEXT_MUTED).size(11.0));
                     for seq in 0..5 {
                         let code = state.my_szone[seq];
                         render_zone_slot(ui, code, zone_w, zone_h, db);
                     }
                 });
 
-                ui.add_space(12.0);
+                ui.add_space(8.0);
+                ui.separator();
 
-                // 4. Player Status & Interactive Hand
+                // 4. PLAYER HAND & MASTER DUEL ACTIVATION TOGGLE
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("Your Hand:").strong().color(ACCENT_GOLD));
-                    ui.label(RichText::new(format!("{} cards | GY: {} cards", state.my_hand.len(), state.my_grave.len())).color(TEXT_MUTED));
+                    ui.label(RichText::new(format!("Your Hand ({} cards):", state.my_hand.len())).color(TEXT_PRIMARY).strong());
+                    if ui.button(format!("GY ({})", state.my_grave.len())).clicked() {
+                        state.view_pile = Some(("Your Graveyard".into(), state.my_grave.clone()));
+                    }
+
+                    // MASTER DUEL ACTIVATION TOGGLE (Bottom-right control)
+                    ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
+                        let (toggle_txt, toggle_col) = match state.activation_toggle {
+                            ActivationToggle::Auto => ("⚡ CHAIN: AUTO", ACCENT_CYAN),
+                            ActivationToggle::On => ("⚡ CHAIN: ON (ALWAYS ASK)", ACCENT_GOLD),
+                            ActivationToggle::Off => ("⚡ CHAIN: OFF", TEXT_MUTED),
+                        };
+                        if ui.button(RichText::new(toggle_txt).color(toggle_col).strong()).clicked() {
+                            state.activation_toggle = match state.activation_toggle {
+                                ActivationToggle::Auto => ActivationToggle::On,
+                                ActivationToggle::On => ActivationToggle::Off,
+                                ActivationToggle::Off => ActivationToggle::Auto,
+                            };
+                            state.duel_log.push(format!("Activation Toggle set to {:?}", state.activation_toggle));
+                        }
+                    });
                 });
 
-                // Hand cards grid
-                ui.horizontal(|ui| {
-                    for (i, &code) in state.my_hand.iter().enumerate() {
-                        if let Some(card) = db.get(code) {
-                            let is_selected = state.selected_hand_idx == Some(i);
-                            let resp = draw_card_item(ui, card, 64.0, 92.0, is_selected);
-                            if resp.clicked() {
-                                state.selected_hand_idx = if is_selected { None } else { Some(i) };
+                ui.add_space(4.0);
+
+                // Player Hand Cards with lift on hover
+                ScrollArea::horizontal().id_salt("duel_hand_cards_scroll").show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        let hand_w = 72.0;
+                        let hand_h = 100.0;
+                        for &code in &state.my_hand {
+                            if let Some(card) = db.get(code) {
+                                let is_selected = state.selected_hand_code == Some(code);
+                                let resp = draw_card_item(ui, card, hand_w, hand_h, is_selected);
+                                if resp.clicked() {
+                                    state.selected_hand_code = if is_selected { None } else { Some(code) };
+                                }
                             }
                         }
-                    }
+                    });
                 });
             });
         });
 
         ui.separator();
 
-        // --- DUEL LOG & ACTION CONTROLS (RIGHT) ---
-        ui.allocate_ui(Vec2::new(log_w, screen_h - 60.0), |ui| {
+        // --- DUEL LOG & CARD INSPECTOR (RIGHT) ---
+        ui.allocate_ui(Vec2::new(log_w, screen_h - 75.0), |ui| {
             ui.vertical(|ui| {
-                ui.heading(RichText::new("Duel Log").size(14.0).color(TEXT_MUTED));
-                ScrollArea::vertical().max_height(screen_h - 120.0).show(ui, |ui| {
+                ui.heading(RichText::new("Combat & Action Log").size(14.0).color(TEXT_MUTED));
+                ScrollArea::vertical().id_salt("duel_combat_log_scroll").max_height(screen_h - 130.0).show(ui, |ui| {
                     for entry in state.duel_log.iter().rev() {
                         ui.label(RichText::new(entry).size(11.0).color(TEXT_PRIMARY));
                     }
@@ -418,10 +512,38 @@ pub fn render_duel_screen(
         });
     });
 
-    // --- INTERACTIVE HUMAN PROMPT MODAL ---
+    // --- PILE INSPECTOR MODAL (Graveyard / Banished) ---
+    let mut close_pile = false;
+    if let Some((title, cards)) = &state.view_pile {
+        egui::Window::new(RichText::new(title).strong().color(ACCENT_GOLD))
+            .fixed_size(Vec2::new(500.0, 380.0))
+            .show(ui.ctx(), |ui| {
+                ui.label(format!("Total entries: {}", cards.len()));
+                ScrollArea::vertical().id_salt("pile_modal_scroll").show(ui, |ui| {
+                    egui::Grid::new("pile_cards_grid").spacing(Vec2::new(6.0, 6.0)).show(ui, |ui| {
+                        for (i, &code) in cards.iter().enumerate() {
+                            if let Some(card) = db.get(code) {
+                                draw_card_item(ui, card, 64.0, 90.0, false);
+                            }
+                            if (i + 1) % 6 == 0 {
+                                ui.end_row();
+                            }
+                        }
+                    });
+                });
+                if ui.button("Close").clicked() {
+                    close_pile = true;
+                }
+            });
+    }
+    if close_pile {
+        state.view_pile = None;
+    }
+
+    // --- MASTER DUEL INTERACTIVE ACTION MODAL ---
     if let Some(prompt) = state.active_prompt.clone() {
-        egui::Window::new(RichText::new("Action Required").color(ACCENT_GOLD).strong())
-            .fixed_size(Vec2::new(420.0, 260.0))
+        egui::Window::new(RichText::new("⚡ ACTION REQUIRED").color(ACCENT_GOLD).size(15.0).strong())
+            .fixed_size(Vec2::new(450.0, 280.0))
             .show(ui.ctx(), |ui| {
                 match &prompt {
                     CoreMessage::SelectIdleCmd {
@@ -433,35 +555,36 @@ pub fn render_duel_screen(
                         can_ep,
                         ..
                     } => {
-                        ui.heading("Main Phase Action");
-                        ui.label("Choose an action to perform:");
+                        ui.heading(RichText::new("Main Phase: Choose Action").color(ACCENT_CYAN).size(14.0));
+                        ui.label(RichText::new("Select an action or transition phase:").color(TEXT_MUTED));
+                        ui.add_space(4.0);
 
-                        ScrollArea::vertical().max_height(160.0).show(ui, |ui| {
+                        ScrollArea::vertical().id_salt("idle_cmd_actions_scroll").max_height(160.0).show(ui, |ui| {
                             // Normal Summon
                             for (i, s) in summonable.iter().enumerate() {
                                 let name = db.get(s.code).map(|c| c.name.as_str()).unwrap_or("Monster");
-                                if ui.button(format!("Normal Summon: {name}")).clicked() {
+                                if ui.button(RichText::new(format!("⚔️ Normal Summon: {name}")).color(ACCENT_GOLD)).clicked() {
                                     send_response(state, PlayerResponse::IdleCmd(IdleCmdChoice::Summon(i)));
                                 }
                             }
                             // Special Summon
                             for (i, s) in spsummonable.iter().enumerate() {
                                 let name = db.get(s.code).map(|c| c.name.as_str()).unwrap_or("Monster");
-                                if ui.button(format!("Special Summon: {name}")).clicked() {
+                                if ui.button(RichText::new(format!("✨ Special Summon: {name}")).color(ACCENT_PURPLE)).clicked() {
                                     send_response(state, PlayerResponse::IdleCmd(IdleCmdChoice::SpSummon(i)));
                                 }
                             }
-                            // Activatable
+                            // Activatable Spell/Effect
                             for (i, a) in activatable.iter().enumerate() {
                                 let name = db.get(a.code).map(|c| c.name.as_str()).unwrap_or("Card");
-                                if ui.button(format!("Activate: {name}")).clicked() {
+                                if ui.button(RichText::new(format!("⚡ Activate: {name}")).color(ACCENT_CYAN)).clicked() {
                                     send_response(state, PlayerResponse::IdleCmd(IdleCmdChoice::Activate(i)));
                                 }
                             }
                             // Set Spell/Trap
                             for (i, s) in ssetable.iter().enumerate() {
                                 let name = db.get(s.code).map(|c| c.name.as_str()).unwrap_or("Card");
-                                if ui.button(format!("Set: {name}")).clicked() {
+                                if ui.button(RichText::new(format!("📜 Set: {name}")).color(TEXT_PRIMARY)).clicked() {
                                     send_response(state, PlayerResponse::IdleCmd(IdleCmdChoice::SetSpell(i)));
                                 }
                             }
@@ -469,10 +592,10 @@ pub fn render_duel_screen(
 
                         ui.separator();
                         ui.horizontal(|ui| {
-                            if *can_bp && ui.button("To Battle Phase ▶").clicked() {
+                            if *can_bp && ui.button(RichText::new("⚔️ To Battle Phase ▶").color(ACCENT_RED).strong()).clicked() {
                                 send_response(state, PlayerResponse::IdleCmd(IdleCmdChoice::ToBattlePhase));
                             }
-                            if *can_ep && ui.button("To End Phase ⏭").clicked() {
+                            if *can_ep && ui.button(RichText::new("⏭ To End Phase").color(TEXT_MUTED)).clicked() {
                                 send_response(state, PlayerResponse::IdleCmd(IdleCmdChoice::ToEndPhase));
                             }
                         });
@@ -484,41 +607,46 @@ pub fn render_duel_screen(
                         can_ep,
                         ..
                     } => {
-                        ui.heading("Battle Phase Action");
+                        ui.heading(RichText::new("Battle Phase: Declare Attack").color(ACCENT_RED).size(14.0));
                         for (i, a) in attackable.iter().enumerate() {
                             let name = db.get(a.code).map(|c| c.name.as_str()).unwrap_or("Monster");
-                            if ui.button(format!("Attack with: {name}")).clicked() {
+                            if ui.button(RichText::new(format!("⚔️ Attack with: {name}")).color(ACCENT_RED).strong()).clicked() {
                                 send_response(state, PlayerResponse::BattleCmd(BattleCmdChoice::Attack(i)));
                             }
                         }
                         for (i, a) in activatable.iter().enumerate() {
                             let name = db.get(a.code).map(|c| c.name.as_str()).unwrap_or("Card");
-                            if ui.button(format!("Activate: {name}")).clicked() {
+                            if ui.button(format!("⚡ Activate: {name}")).clicked() {
                                 send_response(state, PlayerResponse::BattleCmd(BattleCmdChoice::Activate(i)));
                             }
                         }
                         ui.separator();
-                        if *can_ep && ui.button("To End Phase ⏭").clicked() {
-                            send_response(state, PlayerResponse::BattleCmd(BattleCmdChoice::ToEndPhase));
-                        } else if ui.button("To Main Phase 2 ▶").clicked() {
-                            send_response(state, PlayerResponse::BattleCmd(BattleCmdChoice::ToMainPhase2));
-                        }
+                        ui.horizontal(|ui| {
+                            if *can_ep && ui.button("⏭ To End Phase").clicked() {
+                                send_response(state, PlayerResponse::BattleCmd(BattleCmdChoice::ToEndPhase));
+                            } else if ui.button("▶ To Main Phase 2").clicked() {
+                                send_response(state, PlayerResponse::BattleCmd(BattleCmdChoice::ToMainPhase2));
+                            }
+                        });
                     }
 
                     CoreMessage::SelectChain { chains, forced, .. } => {
-                        ui.heading("Chain Activation");
+                        ui.heading(RichText::new("⚡ Chain Window Open").color(ACCENT_GOLD).size(14.0));
                         if chains.is_empty() {
-                            ui.label("No chainable effects available.");
+                            ui.label("No chainable quick effects.");
                             if ui.button("Pass Priority").clicked() {
                                 send_response(state, PlayerResponse::Chain(None));
                             }
                         } else {
-                            for (i, c) in chains.iter().enumerate() {
-                                let name = db.get(c.code).map(|cd| cd.name.as_str()).unwrap_or("Card");
-                                if ui.button(format!("Chain: {name}")).clicked() {
-                                    send_response(state, PlayerResponse::Chain(Some(i)));
+                            ui.label("Respond to activation:");
+                            ScrollArea::vertical().id_salt("chain_responses_scroll").max_height(140.0).show(ui, |ui| {
+                                for (i, c) in chains.iter().enumerate() {
+                                    let name = db.get(c.code).map(|cd| cd.name.as_str()).unwrap_or("Card");
+                                    if ui.button(RichText::new(format!("⚡ Chain: {name}")).color(ACCENT_GOLD)).clicked() {
+                                        send_response(state, PlayerResponse::Chain(Some(i)));
+                                    }
                                 }
-                            }
+                            });
                             if !*forced && ui.button("Pass Priority").clicked() {
                                 send_response(state, PlayerResponse::Chain(None));
                             }
@@ -527,12 +655,12 @@ pub fn render_duel_screen(
 
                     CoreMessage::SelectEffectYesNo { code, .. } => {
                         let name = db.get(*code).map(|c| c.name.as_str()).unwrap_or("Card");
-                        ui.label(format!("Activate the effect of '{name}'?"));
+                        ui.label(RichText::new(format!("Activate the effect of '{name}'?")).strong());
                         ui.horizontal(|ui| {
-                            if ui.button("Yes").clicked() {
+                            if ui.button(RichText::new("Yes").color(ACCENT_GREEN).strong()).clicked() {
                                 send_response(state, PlayerResponse::EffectYesNo(true));
                             }
-                            if ui.button("No").clicked() {
+                            if ui.button(RichText::new("No").color(ACCENT_RED)).clicked() {
                                 send_response(state, PlayerResponse::EffectYesNo(false));
                             }
                         });
@@ -552,7 +680,7 @@ pub fn render_duel_screen(
 
                     CoreMessage::SelectCard { cards, min, max, cancelable, .. } => {
                         ui.label(format!("Select {min} to {max} card(s):"));
-                        ScrollArea::vertical().max_height(140.0).show(ui, |ui| {
+                        ScrollArea::vertical().id_salt("select_card_targets_scroll").max_height(140.0).show(ui, |ui| {
                             for (i, c) in cards.iter().enumerate() {
                                 let name = db.get(c.code).map(|cd| cd.name.as_str()).unwrap_or("Card");
                                 if ui.button(format!("{i}: {name}")).clicked() {
@@ -569,10 +697,10 @@ pub fn render_duel_screen(
                         ui.label("Select Battle Position:");
                         let pos = *positions as u32;
                         ui.horizontal(|ui| {
-                            if (pos & POS_FACEUP_ATTACK) != 0 && ui.button("Attack Position").clicked() {
+                            if (pos & POS_FACEUP_ATTACK) != 0 && ui.button("⚔️ Attack Position").clicked() {
                                 send_response(state, PlayerResponse::Position(POS_FACEUP_ATTACK));
                             }
-                            if (pos & POS_FACEUP_DEFENSE) != 0 && ui.button("Defense Position").clicked() {
+                            if (pos & POS_FACEUP_DEFENSE) != 0 && ui.button("🛡️ Defense Position").clicked() {
                                 send_response(state, PlayerResponse::Position(POS_FACEUP_DEFENSE));
                             }
                         });
@@ -604,7 +732,7 @@ pub fn render_duel_screen(
                     }
 
                     _ => {
-                        ui.label("Awaiting decision...");
+                        ui.label("Awaiting engine decision...");
                         if ui.button("Continue").clicked() {
                             send_response(state, PlayerResponse::Cancel);
                         }
@@ -629,8 +757,13 @@ fn render_zone_slot(ui: &mut Ui, card_code: Option<u32>, width: f32, height: f32
         }
     }
 
-    // Empty Zone Slot
+    // Empty Zone Slot with metallic grid bevel
     let (rect, _) = ui.allocate_exact_size(Vec2::new(width, height), egui::Sense::hover());
-    ui.painter().rect_filled(rect, 3.0, Color32::from_rgb(22, 26, 36));
-    ui.painter().rect_stroke(rect, 3.0, Stroke::new(1.0, Color32::from_rgb(45, 52, 70)), egui::StrokeKind::Inside);
+    ui.painter().rect_filled(rect, 4.0, Color32::from_rgb(18, 23, 34));
+    ui.painter().rect_stroke(
+        rect,
+        4.0,
+        Stroke::new(1.0, Color32::from_rgb(38, 48, 70)),
+        bevy_egui::egui::StrokeKind::Inside,
+    );
 }

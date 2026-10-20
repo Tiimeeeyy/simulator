@@ -69,7 +69,7 @@ pub fn render_banlist_browser(
         ui.allocate_ui(Vec2::new(list_w, screen_h - 60.0), |ui| {
             ui.vertical(|ui| {
                 ui.heading(RichText::new("Format History").size(14.0).color(TEXT_MUTED));
-                ScrollArea::vertical().show(ui, |ui| {
+                ScrollArea::vertical().id_salt("banlist_names_scroll").show(ui, |ui| {
                     for (i, name) in names.iter().enumerate() {
                         let is_selected = state.selected_index == i;
                         if ui.selectable_label(is_selected, name).clicked() {
@@ -140,7 +140,7 @@ pub fn render_banlist_browser(
 
                     ui.label(RichText::new(format!("Showing {} cards", cards_to_show.len())).color(TEXT_MUTED));
 
-                    ScrollArea::vertical().show(ui, |ui| {
+                    ScrollArea::vertical().id_salt("banlist_cards_scroll").show(ui, |ui| {
                         let card_w = 68.0;
                         let card_h = 96.0;
                         let cols = ((content_w - 20.0) / (card_w + 6.0)).max(1.0) as usize;
